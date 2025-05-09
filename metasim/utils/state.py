@@ -196,11 +196,11 @@ def state_tensor_to_nested(handler: BaseSimHandler, tensor_state: TensorState) -
                 robot_states[robot_name]["body"] = _body_tensor_to_dict(robot_state.body_state[env_id], bns)
 
         camera_states = {}
-        for camera_name, camera_state in tensor_state.cameras.items():
-            camera_states[camera_name] = {
-                "rgb": camera_state.rgb[env_id].cpu(),
-                "depth": camera_state.depth[env_id].cpu(),
-            }
+        # for camera_name, camera_state in tensor_state.cameras.items():
+        #     camera_states[camera_name] = {
+        #         "rgb": camera_state.rgb[env_id].cpu(),
+        #         "depth": camera_state.depth[env_id].cpu(),
+        #     }
 
         env_state = {
             "objects": object_states,
@@ -220,10 +220,10 @@ def _alloc_state_tensors(
 
     root = torch.zeros((n_env, 13), device=device)
 
-    n_body = n_body or 0                   
+    n_body = n_body or 0
     body = torch.zeros((n_env, n_body, 13), device=device) if n_body else None
 
-    n_jnt  = n_jnt  or 0                   
+    n_jnt  = n_jnt  or 0
     jpos = torch.zeros((n_env, n_jnt), device=device) if n_jnt else None
     jvel = torch.zeros_like(jpos) if jpos is not None else None
     return root, body, jpos, jvel
@@ -238,7 +238,7 @@ def list_state_to_tensor(
     """Convert nested python list-states to a batched TensorState."""
     obj_names   = sorted({n for es in env_states for n in es["objects"].keys()})
     robot_names = sorted({n for es in env_states for n in es["robots"].keys()})
-    cam_names   = sorted({                       
+    cam_names   = sorted({
         n for es in env_states
         if "cameras" in es
         for n in es["cameras"].keys()
@@ -264,12 +264,20 @@ def list_state_to_tensor(
             if name not in es["objects"]:
                 continue
             s = es["objects"][name]
-            root[e, :3], root[e, 3:7], root[e, 7:10], root[e, 10:13] = \
-                s["pos"], s["rot"], s["vel"], s["ang_vel"]
+
+            vel     = s.get("vel",      torch.zeros(3, device=dev))
+            ang_vel = s.get("ang_vel",  torch.zeros(3, device=dev))
+
+            root[e, :3]   = s["pos"]
+            root[e, 3:7]  = s["rot"]
+            root[e, 7:10] = vel
+            root[e, 10:13]= ang_vel
+
 
             if body is not None and "body" in s:
                 for i, bn in enumerate(sorted(bnames)):
-                    if bn not in s["body"]: continue
+                    if bn not in s["body"]:
+                        continue
                     bi = s["body"][bn]
                     body[e, i, :3],  body[e,i, 3:7]  = bi["pos"], bi["rot"]
                     body[e, i, 7:10], body[e,i,10:13]= bi["vel"], bi["ang_vel"]
@@ -317,15 +325,15 @@ def list_state_to_tensor(
             root[e,  7:10]  = vel
             root[e, 10:13]  = ang_vel
             for i, jn in enumerate(sorted(jnames)):
-                if "dof_pos"        in s and jn in s["dof_pos"]:        
+                if "dof_pos"        in s and jn in s["dof_pos"]:
                     jpos[e,i] = s["dof_pos"][jn]
-                if "dof_vel"        in s and jn in s["dof_vel"]:        
+                if "dof_vel"        in s and jn in s["dof_vel"]:
                     jvel[e,i] = s["dof_vel"][jn]
-                if "dof_pos_target" in s and jn in s["dof_pos_target"]: 
+                if "dof_pos_target" in s and jn in s["dof_pos_target"]:
                     jpos_t[e,i] = s["dof_pos_target"][jn]
-                if "dof_vel_target" in s and jn in s["dof_vel_target"]: 
+                if "dof_vel_target" in s and jn in s["dof_vel_target"]:
                     jvel_t[e,i] = s["dof_vel_target"][jn]
-                if "dof_torque"     in s and jn in s["dof_torque"]:     
+                if "dof_torque"     in s and jn in s["dof_torque"]:
                     jeff_t[e,i] = s["dof_torque"][jn]
 
             if body is not None and "body" in s:
@@ -354,5 +362,5 @@ def list_state_to_tensor(
         objects  = objects,
         robots   = robots,
         cameras  = cameras,
-        sensors  = {},        
+        sensors  = {},
     )
